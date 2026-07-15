@@ -1,0 +1,40 @@
+# ptplab-haddock - HADDOCK3 docking compute container
+# Exposes haddock3 on PATH; app.py talks to this via `docker exec`, with the
+# shared jobs directory bind-mounted at the same path inside and outside
+# the container.
+FROM continuumio/miniconda3:24.1.2-0
+LABEL org.opencontainers.image.title="ptplab-haddock"
+LABEL org.opencontainers.image.description="HADDOCK3 docking environment for Plant Peptide AI Lab"
+SHELL ["/bin/bash", "-c"]
+
+# HADDOCK3 and its dependency freesasa contain C/C++ extensions that must be
+# compiled at install time - the base miniconda image doesn't include a
+# compiler by default, so we install one here.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+        g++ \
+        make && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN conda create -n haddock_env python=3.10 -y && \
+    conda clean -afy
+
+# HADDOCK3 is not distributed via conda/pip index - it must be built from
+# source. We copy the local haddock3/ source tree (already cloned in this
+# project) into the image and install it with pip.
+COPY haddock3 /opt/haddock3_src
+
+RUN source activate haddock_env && \
+    pip install --no-cache-dir biopython && \
+    pip install --no-cache-dir /opt/haddock3_src && \
+    conda clean -afy
+
+# Make `haddock3` callable without `conda run` wrapping, since app.py
+# does `docker exec <container> haddock3 docking.toml` directly.
+ENV PATH=/opt/conda/envs/haddock_env/bin:$PATH
+
+WORKDIR /work
+
+# Keep the container alive; actual work happens via `docker exec` from the app.
+CMD ["sleep", "infinity"]

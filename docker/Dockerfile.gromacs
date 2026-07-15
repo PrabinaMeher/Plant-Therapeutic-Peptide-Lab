@@ -1,0 +1,37 @@
+# ptplab-gromacs - GROMACS + gmx_MMPBSA compute container
+# Runs MD simulation and MM-PBSA binding free energy calculations.
+# app.py execs run_md.sh inside this container.
+FROM continuumio/miniconda3:24.1.2-0
+LABEL org.opencontainers.image.title="ptplab-gromacs"
+LABEL org.opencontainers.image.description="GROMACS + gmx_MMPBSA environment for Plant Peptide AI Lab"
+SHELL ["/bin/bash", "-c"]
+
+# gmx_MMPBSA depends on mpi4py, which compiles C code against an MPI
+# implementation - the base image has neither a compiler nor MPI dev
+# headers, so install both before the pip install step below.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+        g++ \
+        gfortran \
+        libopenmpi-dev \
+        openmpi-bin && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN conda create -n mmpbsa_env python=3.10 -y && \
+    conda clean -afy
+
+RUN source activate mmpbsa_env && \
+    conda install -c conda-forge -y \
+        gromacs \
+        ambertools && \
+    conda clean -afy
+
+RUN source activate mmpbsa_env && \
+    pip install --no-cache-dir gmx_MMPBSA
+
+# run_md.sh internally does `conda activate mmpbsa_env`, so keep conda on PATH
+# rather than flattening the env into the base PATH like the haddock image.
+ENV PATH=/opt/conda/bin:$PATH
+WORKDIR /work
+CMD ["sleep", "infinity"]

@@ -1,0 +1,31 @@
+# ptplab-esmfold - ESMFold structure prediction compute container
+# Exposes a tiny CLI (fold.py) that compute_backend.py calls via `docker exec`.
+# GPU-accelerated if available (uncomment the CUDA base image below);
+# falls back to CPU otherwise (slow but functional for short peptides).
+
+FROM continuumio/miniconda3:24.1.2-0
+# For GPU support, replace the line above with, e.g.:
+# FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+# and install miniconda manually - kept simple here for CPU-only default.
+
+LABEL org.opencontainers.image.title="ptplab-esmfold"
+LABEL org.opencontainers.image.description="ESMFold structure prediction environment for Plant Peptide AI Lab"
+
+SHELL ["/bin/bash", "-c"]
+
+RUN conda create -n esmfold_env python=3.10 -y && \
+    conda clean -afy
+
+RUN source activate esmfold_env && \
+    pip install --no-cache-dir \
+        torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir \
+        fair-esm \
+        biopython
+
+ENV PATH=/opt/conda/envs/esmfold_env/bin:$PATH
+
+WORKDIR /app
+COPY docker/fold.py /app/fold.py
+
+CMD ["sleep", "infinity"]

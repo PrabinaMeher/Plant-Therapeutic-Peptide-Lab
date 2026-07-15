@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.log
+*.bak_*
+.streamlit/secrets.toml
+.DS_Store
+ptplab_jobs/
+md_job_*/
+haddock_job_*/

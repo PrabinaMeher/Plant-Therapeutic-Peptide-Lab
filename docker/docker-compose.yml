@@ -1,0 +1,114 @@
+# docker-compose.yml - Therapeutic Peptide AI Lab
+# =========================================================
+# Brings up 5 containers:
+#   ptplab-app      Streamlit (8502) - what users interact with
+#   ptplab-haddock  HADDOCK3 docking
+#   ptplab-gromacs  GROMACS + gmx_MMPBSA (MD + binding free energy)
+#   ptplab-esmfold  ESMFold structure prediction
+#   ollama          Local LLM backend for the in-app Ask Assistant
+#
+# All compute containers share a single bind-mounted job directory with the
+# app container, at the SAME absolute path, so files written by one process
+# are immediately visible to the others.
+#
+# Usage:
+#   docker compose up -d            # start everything
+#   docker compose up -d ptplab-haddock   # start just one container
+#   docker compose logs -f ptplab-app     # tail logs
+#   docker compose down             # stop everything
+
+
+
+x-jobs-volume: &jobs-volume
+  type: bind
+  source: ${PTPLAB_JOBS_DIR:-./ptplab_jobs}
+  target: ${PTPLAB_JOBS_DIR:-/ptplab_jobs}
+
+services:
+  ptplab-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.app
+    image: ptplab/app:latest
+    container_name: ptplab-app
+    ports:
+      - "8502:8502"
+    environment:
+      PTPLAB_JOBS_DIR: ${PTPLAB_JOBS_DIR:-/ptplab_jobs}
+      PTPLAB_HADDOCK_CONTAINER: ptplab-haddock
+      PTPLAB_GROMACS_CONTAINER: ptplab-gromacs
+      PTPLAB_ESMFOLD_CONTAINER: ptplab-esmfold
+      OLLAMA_URL: "http://ollama:11434/api/chat"
+    volumes:
+      - *jobs-volume
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - ptplab-haddock
+      - ptplab-gromacs
+      - ptplab-esmfold
+      - ollama
+    restart: unless-stopped
+
+  ptplab-haddock:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.haddock
+    image: ptplab/haddock:latest
+    container_name: ptplab-haddock
+    volumes:
+      - *jobs-volume
+    restart: unless-stopped
+
+  ptplab-gromacs:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gromacs
+    image: ptplab/gromacs:latest
+    container_name: ptplab-gromacs
+    volumes:
+      - *jobs-volume
+    # Uncomment to enable GPU acceleration for GROMACS (requires nvidia-docker):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    restart: unless-stopped
+
+  ptplab-esmfold:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.esmfold
+    image: ptplab/esmfold:latest
+    container_name: ptplab-esmfold
+    volumes:
+      - *jobs-volume
+    # Uncomment for GPU-accelerated folding:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #         devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ptplab-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # Uncomment for GPU-accelerated inference (requires nvidia-docker):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  ollama_data:
