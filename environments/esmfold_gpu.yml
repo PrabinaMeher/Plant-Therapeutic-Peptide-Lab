@@ -191,6 +191,8 @@ dependencies:
   - zlib-ng=2.3.3
   - zstd=1.5.7
   - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu121
+      - --find-links https://data.pyg.org/whl/torch-2.5.1+cu121.html
       - absl-py==2.4.0
       - aiobotocore==3.2.1
       - aiohappyeyeballs==2.6.1
@@ -239,7 +241,7 @@ dependencies:
       - deprecation==2.1.0
       - dill==0.4.1
       - distlib==0.4.0
-      - dllogger==1.1.0
+      - dllogger @ git+https://github.com/NVIDIA/dllogger.git
       - dm-tree==0.1.9
       - docutils==0.19
       - editdistance==0.8.1
