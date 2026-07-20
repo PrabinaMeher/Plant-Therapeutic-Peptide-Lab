@@ -28,15 +28,7 @@ THERAPEUTIC_CLASSES = ["Antibacterial (ABP)", "Anticancer (ACP)", "Antifungal (A
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = BASE_DIR
 
-ESMFOLD_PYTHON = os.environ.get(
-    "ESMFOLD_PYTHON",
-    "/home/user/anaconda3/envs/esmfold_gpu/bin/python"
-)
-
-DOCK_PYTHON = os.environ.get(
-    "DOCK_PYTHON",
-    "/home/user/anaconda3/envs/esmfold_diffdock/bin/python"
-)
+ESMFOLD_ENV = os.environ.get("ESMFOLD_ENV", "esmfold_gpu")
 
 
 
@@ -89,7 +81,7 @@ def evaluate_candidate(sequence):
 
     # Optional: enforce peptide length
     if len(sequence) > 150:
-        print("⚠️ Warning: Long sequence may not be suitable for peptide analysis")
+        print(" Warning: Long sequence may not be suitable for peptide analysis")
 
     #  SAFE ANALYSIS
     analysis = ProteinAnalysis(sequence)
@@ -129,31 +121,7 @@ def evaluate_candidate(sequence):
     }
 
 
-#  STRUCTURE
 
-
-#def fold_peptide(sequence, output_file="peptide_structure.pdb"):
-
-#    print("\n  Peptide Folding ")
-
-#    output_path = os.path.join(PROJECT_ROOT, output_file)
-
-#    esm_script = os.path.join(BASE_DIR, "docking", "esmfold_runner.py")
-
-#    cmd = [
-#        ESMFOLD_PYTHON,
-#        esm_script,
-#        sequence,
-#        output_path,
-#        "1"
-#    ]
-
-#    subprocess.run(cmd, check=True)
-
- #   if not os.path.exists(output_path):
- #       raise RuntimeError("ESMFold failed")
-
- #   return output_path
 
 def fold_peptide(sequence, output_file=None):
     import tempfile
@@ -170,14 +138,14 @@ def fold_peptide(sequence, output_file=None):
     esm_script = os.path.join(BASE_DIR, "docking", "esmfold_runner.py")
 
     cmd = [
-        ESMFOLD_PYTHON,
+        "conda", "run", "-n", ESMFOLD_ENV, "python",
         esm_script,
         sequence,
         output_path,
         "1"
     ]
 
-    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
     print(result.stdout)
     print(result.stderr)
 
@@ -273,69 +241,3 @@ def clean_pdb(input_path, output_path):
 
 
 
-#  DOCKING (FINAL)
-
-
-def run_docking(peptide_pdb, receptor_pdb):
-
-    print("\n  Docking ")
-
-    docking_dir = os.path.abspath(os.path.join(PROJECT_ROOT, "docking_output"))
-    os.makedirs(docking_dir, exist_ok=True)
-
-    peptide_pdb = os.path.abspath(peptide_pdb)
-    receptor_pdb = os.path.abspath(receptor_pdb)
-
-    #  Clean receptor (VERY IMPORTANT)
-    clean_receptor = receptor_pdb.replace(".pdb", "_clean.pdb")
-    clean_pdb(receptor_pdb, clean_receptor)
-    receptor_pdb = clean_receptor
-
-    diffdock_script = os.path.join(BASE_DIR, "docking", "diffdock_runner.py")
-
-    cmd = [
-        DOCK_PYTHON,
-        diffdock_script,
-        "--protein_path", receptor_pdb,   
-        "--ligand", peptide_pdb,
-        "--out_dir", docking_dir
-    ]
-
-    print("Running DiffDock...")
-    print("Command:", " ".join(cmd))
-
-    result = subprocess.run(
-        cmd,
-        cwd=BASE_DIR,
-        capture_output=True,
-        text=True
-    )
-
-    print("\n STDOUT \n", result.stdout)
-    print("\n STDERR \n", result.stderr)
-
-    if result.returncode != 0:
-        raise RuntimeError("DiffDock crashed")
-
-    #  Detect output files
-    files = os.listdir(docking_dir)
-    print("Files in docking dir:", files)
-
-    pdb_files = [
-        os.path.join(docking_dir, f)
-        for f in files if f.endswith(".pdb")
-    ]
-
-    if not pdb_files:
-        raise RuntimeError("Docking ran but no PDB files found")
-
-    #  Select best pose
-    def extract_score(f):
-        match = re.search(r"confidence([0-9.]+)", f)
-        return float(match.group(1)) if match else 0
-
-    best_pose = max(pdb_files, key=extract_score)
-
-    print("Selected best pose:", best_pose)
-
-    return best_pose
