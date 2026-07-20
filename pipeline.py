@@ -240,4 +240,7 @@ def clean_pdb(input_path, output_path):
                 out.write(line)
 
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5cfc1adab3ba58ce3d6a482750e6e9a176a4868a
