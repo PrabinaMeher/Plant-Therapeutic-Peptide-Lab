@@ -241,7 +241,6 @@ dependencies:
       - prometheus-client==0.24.1
       - prompt-toolkit==3.0.52
       - psutil==7.2.2
-      - ptplab==1.0.0
       - ptyprocess==0.7.0
       - pure-eval==0.2.3
       - py3dmol==2.5.4
