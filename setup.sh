@@ -17,6 +17,12 @@ conda activate esmfold_gpu
 SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
 echo "$REPO_ROOT" > "$SITE_PACKAGES/ptplab_repo.pth"
 
+echo "--- Installing CUDA toolkit for deepspeed/openfold compatibility ---"
+conda install -c nvidia cuda-toolkit=12.1 cuda-cccl=12.1 -y
+conda env config vars set CUDA_HOME=$CONDA_PREFIX -n esmfold_gpu
+conda deactivate
+conda activate esmfold_gpu
+
 echo "--- Verifying esmfold_gpu setup ---"
 python -c "
 import sys, types
