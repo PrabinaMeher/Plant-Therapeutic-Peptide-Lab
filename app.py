@@ -745,7 +745,9 @@ echo "--- Step 10: Building index ---"
 printf "r $REC_START-$REC_END\\nname 17 Receptor\\nr $PEP_START-$PEP_END\\nname 18 Ligand\\nq\\n" \\
     | gmx make_ndx -f em.gro -o index.ndx
 echo "--- Step 11: Analysis ---"
-printf "17\\n0\\n" | gmx trjconv -s md.tpr -f md.xtc -o md_center.xtc \\
+printf "0\\n" | gmx trjconv -s md.tpr -f md.xtc -o md_nojump.xtc \\
+    -pbc nojump -n index.ndx
+printf "17\\n0\\n" | gmx trjconv -s md.tpr -f md_nojump.xtc -o md_center.xtc \\
     -pbc mol -center -n index.ndx
 printf "17\\n0\\n" | gmx trjconv -s md.tpr -f md_center.xtc -o md_fit.xtc \\
     -fit rot+trans -n index.ndx
