@@ -10,6 +10,11 @@ conda env create -f environments/peptide_sklearn.yml || echo "peptide_sklearn al
 conda env create -f environments/esmfold_gpu.yml || echo "esmfold_gpu already exists, skipping"
 conda env create -f environments/haddock_env.yml || echo "haddock_env already exists, skipping"
 conda env create -f environments/mmpbsa_env.yml || echo "mmpbsa_env already exists, skipping"
+echo "--- Installing gmx_MMPBSA and compiler toolchain in mmpbsa_env ---"
+conda activate mmpbsa_env
+conda install -c conda-forge gcc_linux-64 gxx_linux-64 -y
+pip install gmx_MMPBSA
+conda deactivate
 
 echo "--- Registering local openfold package in esmfold_gpu ---"
 source "$(conda info --base)/etc/profile.d/conda.sh"
