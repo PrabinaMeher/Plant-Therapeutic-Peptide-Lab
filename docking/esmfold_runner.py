@@ -7,12 +7,15 @@ import os
 import math
 import types
 
-import torch
-import openfold
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
 _stub = types.ModuleType("attn_core_inplace_cuda")
 _stub.forward_ = lambda *a, **k: None
 _stub.backward_ = lambda *a, **k: None
 sys.modules["attn_core_inplace_cuda"] = _stub
+
+import torch
+import openfold
 
 import esm
 
