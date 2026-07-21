@@ -1,6 +1,5 @@
 # Copyright 2021 AlQuraishi Laboratory
 # Copyright 2021 DeepMind Technologies Limited
-# Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +17,6 @@ import math
 import torch
 import torch.nn as nn
 from typing import Optional, List, Tuple
-from torch.fx._symbolic_trace import is_fx_tracing
 
 from openfold.model.primitives import (
     Linear, 
@@ -93,9 +91,7 @@ class MSAAttention(nn.Module):
         m: torch.Tensor,
         biases: Optional[List[torch.Tensor]],
         chunk_size: int,
-        use_memory_efficient_kernel: bool,
-        use_deepspeed_evo_attention: bool,
-        use_cuequivariance_attention: bool,
+        use_memory_efficient_kernel: bool, 
         use_lma: bool,
         use_flash: bool,
         flash_mask: Optional[torch.Tensor],
@@ -107,8 +103,6 @@ class MSAAttention(nn.Module):
                 kv_x=m, 
                 biases=biases,
                 use_memory_efficient_kernel=use_memory_efficient_kernel,
-                use_deepspeed_evo_attention=use_deepspeed_evo_attention,
-                use_cuequivariance_attention=use_cuequivariance_attention,
                 use_lma=use_lma,
                 use_flash=use_flash,
                 flash_mask=flash_mask,
@@ -136,50 +130,37 @@ class MSAAttention(nn.Module):
         z: Optional[torch.Tensor],
         mask: Optional[torch.Tensor],
         inplace_safe: bool = False,
-        use_cuequivariance_attention: bool = False,
-        chunk_size: int = 256
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: 
-
+        n_seq, n_res = m.shape[-3:-1]
         if mask is None:
             # [*, N_seq, N_res]
             mask = m.new_ones(
-                m.shape[:-1],
+                m.shape[:-3] + (n_seq, n_res),
             )
 
         # [*, N_seq, 1, 1, N_res]
-        if use_cuequivariance_attention:
-            mask_bias = mask[..., :, None, None, :]
-        else:
-            # [*, I, 1, 1, J]
-            mask_bias = (self.inf * (mask - 1))[..., :, None, None, :]
+        mask_bias = (self.inf * (mask - 1))[..., :, None, None, :]
 
         if (self.pair_bias and 
             z is not None and                       # For the 
             self.layer_norm_z is not None and       # benefit of
             self.linear_z is not None               # TorchScript
         ):
-            if torch.onnx.is_in_onnx_export() or is_fx_tracing():
-                inplace_safe = False
-                chunk_size = None
+            chunks = []
 
-            if chunk_size is None:
-                z = self.layer_norm_z(z)
-                z = self.linear_z(z)
-            else:
-                chunks = []
+            for i in range(0, z.shape[-3], 256):
+                z_chunk = z[..., i: i + 256, :, :]
 
-                for i in range(0, z.shape[-3], chunk_size):
-                    z_chunk = z[..., i: i + chunk_size, :, :]
-                    
-                    # [*, N_res, N_res, C_z]
-                    z_chunk = self.layer_norm_z(z_chunk)
-                    
-                    # [*, N_res, N_res, no_heads]
-                    z_chunk = self.linear_z(z_chunk)
-                    
-                    chunks.append(z_chunk)
-                z = torch.cat(chunks, dim=-3)
-                
+                # [*, N_res, N_res, C_z]
+                z_chunk = self.layer_norm_z(z_chunk)
+            
+                # [*, N_res, N_res, no_heads]
+                z_chunk = self.linear_z(z_chunk)
+
+                chunks.append(z_chunk)
+            
+            z = torch.cat(chunks, dim=-3)
+            
             # [*, 1, no_heads, N_res, N_res]
             z = permute_final_dims(z, (2, 0, 1)).unsqueeze(-4)
 
@@ -240,8 +221,6 @@ class MSAAttention(nn.Module):
         mask: Optional[torch.Tensor] = None, 
         chunk_size: Optional[int] = None,
         use_memory_efficient_kernel: bool = False,
-        use_deepspeed_evo_attention: bool = False,
-        use_cuequivariance_attention: bool = False,
         use_lma: bool = False,
         use_flash: bool = False,
         inplace_safe: bool = False,
@@ -270,20 +249,16 @@ class MSAAttention(nn.Module):
                 checkpoint=_checkpoint_chunks,
                 inplace_safe=inplace_safe,
             )
-        
+       
         if(use_flash):
             assert z is None
             biases = None
         else:    
             m, mask_bias, z = self._prep_inputs(
-                m, z, mask, inplace_safe=inplace_safe,
-                use_cuequivariance_attention=use_cuequivariance_attention,
+                m, z, mask, inplace_safe=inplace_safe
             )
     
             biases = [mask_bias]
-            if z is None and use_cuequivariance_attention:
-                z = m.new_zeros(1, self.no_heads, m.shape[-2], m.shape[-2]) 
-                
             if(z is not None):
                 biases.append(z)
 
@@ -292,9 +267,7 @@ class MSAAttention(nn.Module):
                 m, 
                 biases, 
                 chunk_size,
-                use_memory_efficient_kernel=use_memory_efficient_kernel,
-                use_deepspeed_evo_attention=use_deepspeed_evo_attention,
-                use_cuequivariance_attention=use_cuequivariance_attention,
+                use_memory_efficient_kernel=use_memory_efficient_kernel, 
                 use_lma=use_lma,
                 use_flash=use_flash,
                 flash_mask=mask,
@@ -306,8 +279,6 @@ class MSAAttention(nn.Module):
                 kv_x=m, 
                 biases=biases,
                 use_memory_efficient_kernel=use_memory_efficient_kernel,
-                use_deepspeed_evo_attention=use_deepspeed_evo_attention,
-                use_cuequivariance_attention=use_cuequivariance_attention,
                 use_lma=use_lma,
                 use_flash=use_flash,
                 flash_mask=mask,
@@ -385,8 +356,6 @@ class MSAColumnAttention(nn.Module):
         m: torch.Tensor, 
         mask: Optional[torch.Tensor] = None, 
         chunk_size: Optional[int] = None,
-        use_deepspeed_evo_attention: bool = False,
-        use_cuequivariance_attention: bool = False,
         use_lma: bool = False,
         use_flash: bool = False,
     ) -> torch.Tensor:
@@ -409,9 +378,7 @@ class MSAColumnAttention(nn.Module):
         m = self._msa_att(
             m, 
             mask=mask, 
-            chunk_size=chunk_size,
-            use_deepspeed_evo_attention=use_deepspeed_evo_attention,
-            use_cuequivariance_attention=use_cuequivariance_attention,
+            chunk_size=chunk_size, 
             use_lma=use_lma,
             use_flash=use_flash,
         )
@@ -489,6 +456,9 @@ class MSAColumnGlobalAttention(nn.Module):
         # [*, N_res, N_seq, C_in]
         m = m.transpose(-2, -3)
         mask = mask.transpose(-1, -2)
+
+        # [*, N_res, N_seq, C_in]
+        #m = self.layer_norm_m(m)
 
         if chunk_size is not None:
             m = self._chunk(m, mask, chunk_size, use_lma=use_lma) 

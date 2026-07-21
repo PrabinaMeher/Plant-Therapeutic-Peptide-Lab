@@ -1,6 +1,5 @@
 # Copyright 2021 AlQuraishi Laboratory
 # Copyright 2021 DeepMind Technologies Limited
-# Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,94 +15,20 @@
 
 from functools import partialmethod
 from typing import Optional
-from abc import ABC, abstractmethod
-import importlib
 
 import torch
 import torch.nn as nn
-from torch.fx._symbolic_trace import is_fx_tracing
 
 from openfold.model.primitives import Linear, LayerNorm
 from openfold.utils.chunk_utils import chunk_layer
-from openfold.utils.precision_utils import is_fp16_enabled
 from openfold.utils.tensor_utils import add, permute_final_dims
 
-# cuEquivariance import handling
-cuequivariance_is_installed = importlib.util.find_spec("cuequivariance_torch") is not None
-if cuequivariance_is_installed:
-    try:
-        from cuequivariance_torch.primitives.triangle import triangle_multiplicative_update
-    except ImportError:
-        cuequivariance_is_installed = False
 
-
-def _cuequivariance_triangular_mult(
-    x: torch.Tensor,
-    direction: str,
-    mask: Optional[torch.Tensor],
-    norm_in_weight: torch.Tensor,
-    norm_in_bias: torch.Tensor,
-    p_in_weight: torch.Tensor,
-    p_in_bias: torch.Tensor,
-    g_in_weight: torch.Tensor,
-    g_in_bias: torch.Tensor,
-    norm_out_weight: torch.Tensor,
-    norm_out_bias: torch.Tensor,
-    p_out_weight: torch.Tensor,
-    p_out_bias: torch.Tensor,
-    g_out_weight: torch.Tensor,
-    g_out_bias: torch.Tensor,
-    eps: float = 1e-5,
-):
-    """
-    Wrapper function for cuEquivariance triangle multiplicative update.
-    
-    Args:
-        x: [*, N, N, C] input tensor
-        direction: "outgoing" or "incoming" 
-        mask: [*, N, N] mask tensor
-        norm_in_weight: [C] input normalization weight
-        norm_in_bias: [C] input normalization bias
-        p_in_weight: [2*C, C] input projection weight
-        g_in_weight: [2*C, C] input gating weight
-        norm_out_weight: [C] output normalization weight
-        norm_out_bias: [C] output normalization bias
-        p_out_weight: [C, C] output projection weight
-        g_out_weight: [C, C] output gating weight
-        eps: epsilon for numerical stability
-    
-    Returns:
-        [*, N, N, C] output tensor
-    """
-    if not cuequivariance_is_installed:
-        raise ValueError(
-            "_cuequivariance_triangular_mult requires that cuequivariance_torch be installed"
-        )
-    return triangle_multiplicative_update(
-        x=x,
-        direction=direction,
-        mask=mask,
-        norm_in_weight=norm_in_weight,
-        norm_in_bias=norm_in_bias,
-        p_in_weight=p_in_weight,
-        p_in_bias=p_in_bias,
-        g_in_weight=g_in_weight,
-        g_in_bias=g_in_bias,
-        norm_out_weight=norm_out_weight,
-        norm_out_bias=norm_out_bias,
-        p_out_weight=p_out_weight,
-        p_out_bias=p_out_bias,
-        g_out_weight=g_out_weight,
-        g_out_bias=g_out_bias,
-        eps=eps,
-    ).view(x.shape)
-
-class BaseTriangleMultiplicativeUpdate(nn.Module, ABC):
+class TriangleMultiplicativeUpdate(nn.Module):
     """
     Implements Algorithms 11 and 12.
     """
-    @abstractmethod
-    def __init__(self, c_z, c_hidden, _outgoing):
+    def __init__(self, c_z, c_hidden, _outgoing=True):
         """
         Args:
             c_z:
@@ -111,11 +36,15 @@ class BaseTriangleMultiplicativeUpdate(nn.Module, ABC):
             c:
                 Hidden channel dimension
         """
-        super(BaseTriangleMultiplicativeUpdate, self).__init__()
+        super(TriangleMultiplicativeUpdate, self).__init__()
         self.c_z = c_z
         self.c_hidden = c_hidden
         self._outgoing = _outgoing
 
+        self.linear_a_p = Linear(self.c_z, self.c_hidden)
+        self.linear_a_g = Linear(self.c_z, self.c_hidden, init="gating")
+        self.linear_b_p = Linear(self.c_z, self.c_hidden)
+        self.linear_b_g = Linear(self.c_z, self.c_hidden, init="gating")
         self.linear_g = Linear(self.c_z, self.c_z, init="gating")
         self.linear_z = Linear(self.c_hidden, self.c_z, init="final")
 
@@ -153,47 +82,6 @@ class BaseTriangleMultiplicativeUpdate(nn.Module, ABC):
             p = torch.matmul(a, b)
 
         return permute_final_dims(p, (1, 2, 0))
-
-    @abstractmethod
-    def forward(self,
-        z: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-        inplace_safe: bool = False,
-        use_cuequivariance_multiplicative_update: bool = False,
-        _add_with_inplace: bool = False
-    ) -> torch.Tensor:
-        """
-        Args:
-            x:
-                [*, N_res, N_res, C_z] input tensor
-            mask:
-                [*, N_res, N_res] input mask
-        Returns:
-            [*, N_res, N_res, C_z] output tensor
-        """
-        pass
-
-
-class TriangleMultiplicativeUpdate(BaseTriangleMultiplicativeUpdate):
-    """
-    Implements Algorithms 11 and 12.
-    """
-    def __init__(self, c_z, c_hidden, _outgoing=True):
-        """
-        Args:
-            c_z:
-                Input channel dimension
-            c:
-                Hidden channel dimension
-        """
-        super(TriangleMultiplicativeUpdate, self).__init__(c_z=c_z,
-                                                           c_hidden=c_hidden,
-                                                           _outgoing=_outgoing)
-
-        self.linear_a_p = Linear(self.c_z, self.c_hidden)
-        self.linear_a_g = Linear(self.c_z, self.c_hidden, init="gating")
-        self.linear_b_p = Linear(self.c_z, self.c_hidden)
-        self.linear_b_g = Linear(self.c_z, self.c_hidden, init="gating")
 
     def _inference_forward(self,
         z: torch.Tensor,
@@ -470,7 +358,6 @@ class TriangleMultiplicativeUpdate(BaseTriangleMultiplicativeUpdate):
         z: torch.Tensor, 
         mask: Optional[torch.Tensor] = None,
         inplace_safe: bool = False,
-        use_cuequivariance_multiplicative_update: bool = False,
         _add_with_inplace: bool = False,
         _inplace_chunk_size: Optional[int] = 256,
     ) -> torch.Tensor:
@@ -483,38 +370,7 @@ class TriangleMultiplicativeUpdate(BaseTriangleMultiplicativeUpdate):
         Returns:
             [*, N_res, N_res, C_z] output tensor
         """
-
-        if use_cuequivariance_multiplicative_update:
-            p_in_weight = torch.cat([self.linear_a_p.weight, self.linear_b_p.weight], dim=0)
-            g_in_weight = torch.cat([self.linear_a_g.weight, self.linear_b_g.weight], dim=0)
-
-            p_in_bias = torch.cat([self.linear_a_p.bias, self.linear_b_p.bias], dim=0)
-            g_in_bias = torch.cat([self.linear_a_g.bias, self.linear_b_g.bias], dim=0)
-
-            result = _cuequivariance_triangular_mult(
-                z,
-                direction="outgoing" if self._outgoing else "incoming",
-                mask=mask,
-                norm_in_weight=self.layer_norm_in.weight,   
-                norm_in_bias=self.layer_norm_in.bias,
-                p_in_weight=p_in_weight,
-                p_in_bias=p_in_bias,
-                g_in_weight=g_in_weight,
-                g_in_bias=g_in_bias,
-                norm_out_weight=self.layer_norm_out.weight,
-                norm_out_bias=self.layer_norm_out.bias,
-                p_out_weight=self.linear_z.weight,
-                p_out_bias=self.linear_z.bias,
-                g_out_weight=self.linear_g.weight,
-                g_out_bias=self.linear_g.bias,
-                eps=1e-5,
-            )
-            # When not inplace_safe (training), caller should have set _add_with_inplace to False
-            if inplace_safe and _add_with_inplace:
-                result += z
-            return result
-
-        if inplace_safe:
+        if(inplace_safe):
             x = self._inference_forward(
                 z, 
                 mask, 
@@ -527,7 +383,7 @@ class TriangleMultiplicativeUpdate(BaseTriangleMultiplicativeUpdate):
             mask = z.new_ones(z.shape[:-1])
 
         mask = mask.unsqueeze(-1)
-
+        
         z = self.layer_norm_in(z)
         a = mask
         a = a * self.sigmoid(self.linear_a_g(z)) 
@@ -535,20 +391,7 @@ class TriangleMultiplicativeUpdate(BaseTriangleMultiplicativeUpdate):
         b = mask
         b = b * self.sigmoid(self.linear_b_g(z))
         b = b * self.linear_b_p(z)
-
-        # Prevents overflow of torch.matmul in combine projections in
-        # reduced-precision modes
-        if is_fp16_enabled():
-            a_std = a.std()
-            b_std = b.std()
-            if a_std != 0. and b_std != 0.:
-                a = a / a.std()
-                b = b / b.std()
-            with torch.cuda.amp.autocast(enabled=False):
-                x = self._combine_projections(a.float(), b.float())
-        else:
-            x = self._combine_projections(a, b)
-        
+        x = self._combine_projections(a, b)
         del a, b
         x = self.layer_norm_out(x)
         x = self.linear_z(x)
@@ -570,179 +413,3 @@ class TriangleMultiplicationIncoming(TriangleMultiplicativeUpdate):
     Implements Algorithm 12.
     """
     __init__ = partialmethod(TriangleMultiplicativeUpdate.__init__, _outgoing=False)
-
-
-class FusedTriangleMultiplicativeUpdate(BaseTriangleMultiplicativeUpdate):
-    """
-    Implements Algorithms 11 and 12.
-    """
-
-    def __init__(self, c_z, c_hidden, _outgoing=True):
-        """
-        Args:
-            c_z:
-                Input channel dimension
-            c:
-                Hidden channel dimension
-        """
-        super(FusedTriangleMultiplicativeUpdate, self).__init__(c_z=c_z,
-                                                                c_hidden=c_hidden,
-                                                                _outgoing=_outgoing)
-
-        self.linear_ab_p = Linear(self.c_z, self.c_hidden * 2)
-        self.linear_ab_g = Linear(self.c_z, self.c_hidden * 2, init="gating")
-
-    def _inference_forward(self,
-                           z: torch.Tensor,
-                           mask: Optional[torch.Tensor] = None,
-                           _inplace_chunk_size: Optional[int] = None,
-                           with_add: bool = True,
-                           ):
-        """
-        Args:
-            z:
-                A [*, N, N, C_z] pair representation
-            mask:
-                A [*, N, N] pair mask
-            with_add:
-                If True, z is overwritten with (z + update). Otherwise, it is
-                overwritten with (update).
-        Returns:
-            A reference to the overwritten z
-        """
-        if mask is None:
-            mask = z.new_ones(z.shape[:-1])
-
-        mask = mask.unsqueeze(-1)
-
-        def compute_projection_helper(pair, mask):
-            p = self.linear_ab_g(pair)
-            p.sigmoid_()
-            p *= self.linear_ab_p(pair)
-            p *= mask
-
-            return p
-
-        def compute_projection(pair, mask):
-            p = compute_projection_helper(pair, mask)
-            left = p[..., :self.c_hidden]
-            right = p[..., self.c_hidden:]
-
-            return left, right
-
-        z_norm_in = self.layer_norm_in(z)
-        a, b = compute_projection(z_norm_in, mask)
-        x = self._combine_projections(a, b, _inplace_chunk_size=_inplace_chunk_size)
-        x = self.layer_norm_out(x)
-        x = self.linear_z(x)
-        g = self.linear_g(z_norm_in)
-        g.sigmoid_()
-        x *= g
-        if (with_add):
-            z += x
-        else:
-            z = x
-
-        return z
-
-    def forward(self,
-                z: torch.Tensor,
-                mask: Optional[torch.Tensor] = None,
-                inplace_safe: bool = False,
-                use_cuequivariance_multiplicative_update: bool = False,
-                _add_with_inplace: bool = False,
-                _inplace_chunk_size: Optional[int] = 256
-                ) -> torch.Tensor:
-        """
-        Args:
-            x:
-                [*, N_res, N_res, C_z] input tensor
-            mask:
-                [*, N_res, N_res] input mask
-        Returns:
-            [*, N_res, N_res, C_z] output tensor
-        """
-
-        if use_cuequivariance_multiplicative_update:
-            direction = "outgoing" if self._outgoing else "incoming"
-            result = _cuequivariance_triangular_mult(
-                x=z,
-                direction=direction,
-                mask=mask,
-                norm_in_weight=self.layer_norm_in.weight,
-                norm_in_bias=self.layer_norm_in.bias,
-                p_in_weight=self.linear_ab_p.weight,
-                p_in_bias=self.linear_ab_p.bias,
-                g_in_weight=self.linear_ab_g.weight,
-                g_in_bias=self.linear_ab_g.bias,
-                norm_out_weight=self.layer_norm_out.weight,
-                norm_out_bias=self.layer_norm_out.bias,
-                p_out_weight=self.linear_z.weight,
-                p_out_bias=self.linear_z.bias,
-                g_out_weight=self.linear_g.weight,
-                g_out_bias=self.linear_g.bias,
-                eps=1e-5,
-            )
-            # When not inplace_safe (training), caller should have set _add_with_inplace to False
-            if inplace_safe and _add_with_inplace:
-                result += z
-            return result
-
-        if (inplace_safe):
-            x = self._inference_forward(
-                z,
-                mask,
-                _inplace_chunk_size=_inplace_chunk_size,
-                with_add=_add_with_inplace,
-            )
-            return x
-
-        if mask is None:
-            mask = z.new_ones(z.shape[:-1])
-
-        mask = mask.unsqueeze(-1)
-
-        z = self.layer_norm_in(z)
-        ab = mask
-        ab = ab * self.sigmoid(self.linear_ab_g(z))
-        ab = ab * self.linear_ab_p(z)
-
-        a = ab[..., :self.c_hidden]
-        b = ab[..., self.c_hidden:]
-
-        # Prevents overflow of torch.matmul in combine projections in
-        # reduced-precision modes
-        a_std = a.std()
-        b_std = b.std()
-        if (is_fp16_enabled() and a_std != 0. and b_std != 0.):
-            a = a / a.std()
-            b = b / b.std()
-
-        if (is_fp16_enabled()):
-            with torch.cuda.amp.autocast(enabled=False):
-                x = self._combine_projections(a.float(), b.float())
-        else:
-            x = self._combine_projections(a, b)
-
-        del a, b
-        x = self.layer_norm_out(x)
-        x = self.linear_z(x)
-        g = self.sigmoid(self.linear_g(z))
-        x = x * g
-
-        return x
-
-
-class FusedTriangleMultiplicationOutgoing(FusedTriangleMultiplicativeUpdate):
-    """
-    Implements Algorithm 11.
-    """
-    __init__ = partialmethod(FusedTriangleMultiplicativeUpdate.__init__, _outgoing=True)
-
-
-class FusedTriangleMultiplicationIncoming(FusedTriangleMultiplicativeUpdate):
-    """
-    Implements Algorithm 12.
-    """
-    __init__ = partialmethod(FusedTriangleMultiplicativeUpdate.__init__, _outgoing=False)
-

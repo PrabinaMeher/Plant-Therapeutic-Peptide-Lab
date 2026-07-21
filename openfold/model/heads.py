@@ -22,7 +22,6 @@ from openfold.utils.loss import (
     compute_tm,
     compute_predicted_aligned_error,
 )
-from openfold.utils.precision_utils import is_fp16_enabled
 
 
 class AuxiliaryHeads(nn.Module):
@@ -76,17 +75,9 @@ class AuxiliaryHeads(nn.Module):
         if self.config.tm.enabled:
             tm_logits = self.tm(outputs["pair"])
             aux_out["tm_logits"] = tm_logits
-            aux_out["ptm_score"] = compute_tm(
+            aux_out["predicted_tm_score"] = compute_tm(
                 tm_logits, **self.config.tm
             )
-            asym_id = outputs.get("asym_id")
-            if asym_id is not None:
-                aux_out["iptm_score"] = compute_tm(
-                    tm_logits, asym_id=asym_id, interface=True, **self.config.tm
-                )
-                aux_out["weighted_ptm_score"] = (self.config.tm["iptm_weight"] * aux_out["iptm_score"]
-                                                 + self.config.tm["ptm_weight"] * aux_out["ptm_score"])
-
             aux_out.update(
                 compute_predicted_aligned_error(
                     tm_logits,
@@ -146,7 +137,7 @@ class DistogramHead(nn.Module):
 
         self.linear = Linear(self.c_z, self.no_bins, init="final")
 
-    def _forward(self, z):  # [*, N, N, C_z]
+    def forward(self, z):  # [*, N, N, C_z]
         """
         Args:
             z:
@@ -158,13 +149,6 @@ class DistogramHead(nn.Module):
         logits = self.linear(z)
         logits = logits + logits.transpose(-2, -3)
         return logits
-    
-    def forward(self, z): 
-        if(is_fp16_enabled()):
-            with torch.cuda.amp.autocast(enabled=False):
-                return self._forward(z.float())
-        else:
-            return self._forward(z)
 
 
 class TMScoreHead(nn.Module):
