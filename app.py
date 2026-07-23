@@ -155,7 +155,18 @@ border-bottom:1px solid #f1f5f9;font-size:0.86rem;}
 padding:0.8rem 1rem;margin:0.3rem 0;display:flex;justify-content:space-between;align-items:center;}
 .drug-pass{border-left:4px solid #15803d;}
 .drug-fail{border-left:4px solid #dc2626;}
-.stProgress>div>div>div{background:#15803d !important;border-radius:4px;}
+
+.stProgress>div>div>div{
+  background:#ffffff !important;
+  border:1px solid #0f2e1c !important;
+  border-radius:8px !important;
+  height:16px !important;
+}
+/* Running/active status - green instead of blue */
+.b-running{background:#f0fdf4;color:#15803d;border:1px solid #86efac;}
+.ps-active{background:#f0fdf4;border:1px solid #86efac;color:#15803d;}
+.hb-running{background:rgba(34,197,94,0.18);color:#86efac;}
+.hb-running .hb-dot{background:#4ade80;box-shadow:0 0 6px rgba(74,222,128,0.8);}
 .stTabs [data-baseweb="tab-list"]{background:#eef1f0;border-radius:10px;padding:3px;gap:2px;}
 .stTabs [data-baseweb="tab"]{background:transparent;border-radius:8px;color:#6b7280;
 font-weight:500;font-size:0.83rem;padding:0.38rem 0.9rem;}
@@ -214,8 +225,7 @@ padding:0.24rem 0.7rem;border-radius:7px;margin-top:0.25rem;}
 .hb-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
 .hb-done{background:rgba(34,197,94,0.18);color:#86efac;}
 .hb-done .hb-dot{background:#4ade80;}
-.hb-running{background:rgba(59,130,246,0.18);color:#93c5fd;}
-.hb-running .hb-dot{background:#60a5fa;box-shadow:0 0 6px rgba(96,165,250,0.8);}
+
 .hb-idle{background:rgba(255,255,255,0.07);color:#c2cfc7;}
 .hb-idle .hb-dot{background:rgba(255,255,255,0.35);}
 </style>

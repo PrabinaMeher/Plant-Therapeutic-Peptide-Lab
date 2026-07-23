@@ -43,5 +43,13 @@ print('torch:', torch.__version__, 'CUDA available:', torch.cuda.is_available())
 "
 
 conda deactivate
+echo "--- Installing Ollama for Ask Assistant feature ---"
+if ! command -v ollama &> /dev/null; then
+    curl -fsSL https://ollama.com/install.sh | sh
+else
+    echo "Ollama already installed, skipping"
+fi
+ollama pull llama3.2:3b
 echo "=== Setup complete ==="
 echo "Run the app with: conda activate peptide_sklearn && streamlit run app.py"
+echo "Note: run '''ollama serve''' in a separate terminal before using the Ask Assistant feature."
