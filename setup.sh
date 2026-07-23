@@ -5,6 +5,8 @@ echo "=== PTPLab Environment Setup ==="
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 
+source "$(conda info --base)/etc/profile.d/conda.sh"
+
 echo "--- Creating conda environments ---"
 conda env create -f environments/peptide_sklearn.yml || echo "peptide_sklearn already exists, skipping"
 conda env create -f environments/esmfold_gpu.yml || echo "esmfold_gpu already exists, skipping"
@@ -17,7 +19,6 @@ pip install gmx_MMPBSA
 conda deactivate
 
 echo "--- Registering local openfold package in esmfold_gpu ---"
-source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate esmfold_gpu
 SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
 echo "$REPO_ROOT" > "$SITE_PACKAGES/ptplab_repo.pth"
