@@ -146,6 +146,6 @@ pip install gmx_MMPBSA
 ## Team
 
 - **Shubham Kumar, Young Professional II, ICAR-IASRI, New Delhi, India**
--Aanchal Gupta, Project Associate I, ICAR-IASRI, New Delhi, India
+- Aanchal Gupta, Project Associate I, ICAR-IASRI, New Delhi, India
 - Dr. Prabina Kumar Meher, Senior Scientist, ICAR-IASRI, New Delhi, India
 - Dr. Upendra Kumar Pradhan, Senior Scientist, ICAR-IASRI, New Delhi, India
