@@ -2,6 +2,13 @@
 
 An end to end bioactive peptide discovery platform: sequence based bioactivity prediction, ESMFold structure prediction, HADDOCK3 docking, GROMACS molecular dynamics, and gmx_MMPBSA binding free energy analysis, all wrapped in a Streamlit web app.
 
+## Team
+- **Dr. Anil Kumar**, ADG (TC), ICAR, New Delhi, India
+- **Dr. Prabina Kumar Meher**, Senior Scientist, ICAR-IASRI, New Delhi, India
+- **Dr. Upendra Kumar Pradhan**, Senior Scientist, ICAR-IASRI, New Delhi, India
+- **Shubham Kumar**, Young Professional II, ICAR-IASRI, New Delhi, India
+- **Aanchal Gupta**, Project Associate I, ICAR-IASRI, New Delhi, India
+- 
 ## Pipeline Overview
 
 1. Peptide Prediction: Protein Language Models (ProtT5, ProtAlbert) screen candidate peptides across 7 bioactivity classes (ABP, ACP, AFP, AHP, AIP, APP, AVP).
@@ -143,9 +150,3 @@ pip install gmx_MMPBSA
 | GROMACS | https://www.gromacs.org |
 | gmx_MMPBSA | https://github.com/Valdes-Tresanco-MS/gmx_MMPBSA |
 
-## Team
-
-- **Shubham Kumar, Young Professional II, ICAR-IASRI, New Delhi, India**
-- Aanchal Gupta, Project Associate I, ICAR-IASRI, New Delhi, India
-- Dr. Prabina Kumar Meher, Senior Scientist, ICAR-IASRI, New Delhi, India
-- Dr. Upendra Kumar Pradhan, Senior Scientist, ICAR-IASRI, New Delhi, India
