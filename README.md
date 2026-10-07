@@ -8,7 +8,7 @@ An end to end bioactive peptide discovery platform: sequence based bioactivity p
 - **Dr. Upendra Kumar Pradhan**, Senior Scientist, ICAR-IASRI, New Delhi, India
 - **Shubham Kumar**, Young Professional II, ICAR-IASRI, New Delhi, India
 - **Aanchal Gupta**, Project Associate I, ICAR-IASRI, New Delhi, India
-- 
+  
 ## Pipeline Overview
 
 1. Peptide Prediction: Protein Language Models (ProtT5, ProtAlbert) screen candidate peptides across 7 bioactivity classes (ABP, ACP, AFP, AHP, AIP, APP, AVP).
