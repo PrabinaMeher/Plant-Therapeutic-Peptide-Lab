@@ -2,7 +2,7 @@
 
 An end to end bioactive peptide discovery platform: sequence based bioactivity prediction, ESMFold structure prediction, HADDOCK3 docking, GROMACS molecular dynamics, and gmx_MMPBSA binding free energy analysis, all wrapped in a Streamlit web app.
 
-## Team
+## Developers
 - **Dr. Anil Kumar**, ADG (TC), ICAR, New Delhi, India
 - **Dr. Prabina Kumar Meher**, Senior Scientist, ICAR-IASRI, New Delhi, India
 - **Dr. Upendra Kumar Pradhan**, Senior Scientist, ICAR-IASRI, New Delhi, India
